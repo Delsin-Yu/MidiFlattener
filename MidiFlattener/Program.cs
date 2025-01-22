@@ -33,6 +33,20 @@ foreach (var file in Directory.GetFiles(dir, "*.mid", SearchOption.AllDirectorie
             Length: x.LengthAs<MetricTimeSpan>(sourceTempoMap))
         ).ToList();
 
+    var timedEvents = sourceMidiTrack
+        .GetTimedEvents()
+        .Where(x => x.Event is ControlChangeEvent)
+        .Select(
+            x =>
+            {
+                var cc = (ControlChangeEvent)x.Event;
+                return (
+                    cc.ControlNumber,
+                    cc.ControlValue,
+                    Time: x.TimeAs<MetricTimeSpan>(sourceTempoMap)
+                );
+            });
+    
     var midiTrack = new TrackChunk();
     
     var newMidi = new MidiFile(
@@ -63,6 +77,15 @@ foreach (var file in Directory.GetFiles(dir, "*.mid", SearchOption.AllDirectorie
         noteManager.Objects.Add(note);
     }
     noteManager.SaveChanges();
+
+    var eventManager = midiTrack.ManageTimedEvents();
+    foreach (var data in timedEvents)
+    {
+        var time = TimeConverter.ConvertFrom(data.Time, dstTempoMap);
+        var cc = new ControlChangeEvent(data.ControlNumber, data.ControlValue);
+        eventManager.Objects.Add(new TimedEvent(cc, time));
+    }
+    eventManager.SaveChanges();
     
     newMidi.Write(Path.ChangeExtension(file, extension), true);
 }
